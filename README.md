@@ -18,6 +18,10 @@ A high-performance, asynchronous ETL (Extract, Transform, Load) platform designe
 * **ORM:** SQLAlchemy (Async)
 * **Infrastructure:** Docker & Docker Compose
 
+## 🌍 Live Deployment
+**Base URL:** https://kasparro-backend-swaroop-atreya.onrender.com
+**Swagger Docs:** https://kasparro-backend-swaroop-atreya.onrender.com/docs
+
 ## 🏃‍♂️ How to Run
 
 1.  **Clone & Configure:**
