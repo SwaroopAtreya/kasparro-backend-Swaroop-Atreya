@@ -1,17 +1,11 @@
 import httpx
-from datetime import datetime
-from typing import List, Dict
-from app.ingestion.orchestrator import BaseSource
-from app.schemas.normalized import CanonicalSchema
+from app.services.models import CanonicalData
 
-class CoinPaprikaSource(BaseSource):
-    """
-    Fetches data from CoinPaprika API (Public Free Tier).
-    Docs: https://api.coinpaprika.com/
-    """
-    # Note: The free public API does not use /v1/tickers in the same way with keys.
-    # We use the public endpoint.
-    BASE_URL = "https://api.coinpaprika.com/v1"
+class CoinPaprikaSource:
+    def __init__(self, source_id: str):
+        self.source_id = source_id
+        self.base_url = "https://api.coinpaprika.com/v1"
+        self.client = httpx.AsyncClient(timeout=10.0)
 
     async def fetch_data(self, offset: int) -> tuple[list[dict], int]:
         # CoinPaprika 'tickers' endpoint returns ALL data at once, so we simulate pagination.
@@ -33,15 +27,20 @@ class CoinPaprikaSource(BaseSource):
                 return [], offset 
             raise e  # Re-raise other errors (500, 404, etc)
 
-    def normalize(self, raw: Dict) -> CanonicalSchema:
-        # Map raw API data to our clean database schema
-        return CanonicalSchema(
-            external_id=raw["id"],
-            source="coinpaprika",
-            symbol=raw["symbol"],
-            name=raw["name"],
-            # The tickers endpoint in free tier puts price inside "quotes" -> "USD"
-            price_usd=float(raw.get("quotes", {}).get("USD", {}).get("price", 0)),
-            market_cap=int(raw.get("quotes", {}).get("USD", {}).get("market_cap", 0)),
-            last_updated=datetime.now() # Use current time as ingestion time
-        )
+    def normalize(self, raw_data: list[dict]) -> list[CanonicalData]:
+        normalized = []
+        for item in raw_data:
+            try:
+                normalized.append(CanonicalData(
+                    symbol=item['symbol'].lower(),
+                    name=item['name'],
+                    price_usd=float(item['quotes']['USD']['price']),
+                    source=self.source_id
+                ))
+            except (KeyError, ValueError) as e:
+                print(f"Skipping bad record from {self.source_id}: {e}")
+                continue
+        return normalized
+
+    async def close(self):
+        await self.client.aclose()
