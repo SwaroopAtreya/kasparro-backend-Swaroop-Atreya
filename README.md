@@ -133,10 +133,7 @@ JSON
     ...
   ]
 }
-📸 Execution Evidence (Local Validation)
-Successful Pipeline Execution: The screenshot below demonstrates the system successfully processing data from CoinPaprika with "SUCCESS" status in the local Docker environment.
 
-Note: The live cloud deployment may occasionally return a 402 error for CoinPaprika due to free-tier IP restrictions on shared cloud hosting, but the core ingestion logic is validated below.
 
 🛠️ Tech Stack
 Language: Python 3.11
