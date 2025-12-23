@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from app.services.models import ETLCheckpoint, RawData, CanonicalData
 from app.core.logging import logger
-from app.schemas.normalized import CanonicalSchema
+from datetime import datetime, timezone
 import traceback
 
 class BaseSource(ABC):
@@ -19,7 +19,7 @@ class BaseSource(ABC):
         pass
 
     @abstractmethod
-    def normalize(self, raw_record: Dict) -> CanonicalSchema:
+    def normalize(self, raw_record: Dict) -> Any:
         """Pure function to convert raw dict to Pydantic Schema"""
         pass
 
@@ -56,27 +56,52 @@ class IngestionOrchestrator:
                 
                 # B. Normalize & Validate (T)
                 try:
-                    clean_data = self.source.normalize(record)
+                    # Note: normalize now returns a list because one raw record could equal multiple coins, 
+                    # but usually it's 1-to-1. We handle the 1-to-1 case here.
+                    clean_data_list = self.source.normalize([record])
+                    if not clean_data_list:
+                        continue
+                        
+                    clean_data = clean_data_list[0]
                     
-                    # C. Load Canonical (Upsert logic - handling duplicates)
+                    # C. Load Canonical (Normalization Logic)
+                    # FIX: Query by SYMBOL (Unique ID), not by Source+ExternalID
                     stmt = select(CanonicalData).where(
-                        CanonicalData.source == self.source.source_id,
-                        CanonicalData.external_id == clean_data.external_id
+                        CanonicalData.symbol == clean_data.symbol
                     )
                     existing = (await self.session.execute(stmt)).scalar_one_or_none()
                     
+                    current_time = datetime.now(timezone.utc)
+                    
                     if existing:
-                        # Update fields - UPDATED FOR CRYPTO SCHEMA
+                        # UPDATE existing coin (Merge Strategy)
                         existing.price_usd = clean_data.price_usd
-                        existing.last_updated = clean_data.last_updated
-                        existing.market_cap = clean_data.market_cap
-                    else:
-                        # FIX: Exclude 'source' from the Pydantic dump so we don't pass it twice
-                        data_dict = clean_data.model_dump(exclude={'source'})
+                        existing.market_cap = clean_data.market_cap or existing.market_cap
+                        existing.last_updated = current_time
                         
+                        # Merge provider specific data into JSON
+                        # We must create a new dict to ensure SQLAlchemy detects the change
+                        current_providers = dict(existing.provider_data) if existing.provider_data else {}
+                        current_providers[self.source.source_id] = {
+                            "price": clean_data.price_usd,
+                            "last_seen": str(current_time)
+                        }
+                        existing.provider_data = current_providers
+                        
+                    else:
+                        # INSERT new coin
                         new_entry = CanonicalData(
-                            source=self.source.source_id,
-                            **data_dict
+                            symbol=clean_data.symbol,
+                            name=clean_data.name,
+                            price_usd=clean_data.price_usd,
+                            market_cap=clean_data.market_cap,
+                            last_updated=current_time,
+                            provider_data={
+                                self.source.source_id: {
+                                    "price": clean_data.price_usd,
+                                    "last_seen": str(current_time)
+                                }
+                            }
                         )
                         self.session.add(new_entry)
                         

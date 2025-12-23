@@ -1,20 +1,29 @@
+# Stage 1: Builder
+FROM python:3.11-slim as builder
+
+WORKDIR /app
+
+# Install build dependencies
+RUN apt-get update && apt-get install -y gcc libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+RUN pip install --user --no-cache-dir -r requirements.txt
+
+# Stage 2: Final Runtime
 FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y make libpq-dev gcc \
+# Install runtime libs only
+RUN apt-get update && apt-get install -y libpq5 \
     && rm -rf /var/lib/apt/lists/*
 
-# Python Deps
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Copy installed packages from builder
+COPY --from=builder /root/.local /root/.local
+ENV PATH=/root/.local/bin:$PATH
 
-# Copy Code
 COPY . .
 
-# Environment
-ENV PYTHONPATH=/app
-
-# Default command (overridden by compose)
+# Production command (No reload)
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

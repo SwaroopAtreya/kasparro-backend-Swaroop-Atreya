@@ -4,7 +4,8 @@ services:
   # 1. API Service
   api:
     build: .
-    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+    # FIXED: Removed '--reload' for production compliance
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000
     ports:
       - "8000:8000"
     env_file: .env
@@ -12,15 +13,15 @@ services:
       - db
     restart: always
 
-  # 2. ETL Worker (Runs via internal Scheduler or Cron)
+  # 2. ETL Worker
   etl-worker:
     build: .
-    # Simple loop wrapper for demo purposes. In prod, use Cloud Cron calling this script.
+    # Runs the ETL process once. In production, this would be triggered by a Cron job.
     command: python -c "import time; from app.services.etl_service import run_all; run_all()"
     env_file: .env
     depends_on:
       - db
-      - api # wait for migrations effectively
+      - api
 
   # 3. Database
   db:
@@ -33,6 +34,12 @@ services:
       - postgres_data:/var/lib/postgresql/data
     ports:
       - "5432:5432"
+    # Optional: Add a healthcheck for robustness (good practice)
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
 volumes:
   postgres_data:

@@ -21,18 +21,20 @@ class CanonicalData(Base):
     __tablename__ = "canonical_data"
     
     id = Column(Integer, primary_key=True, index=True)
-    external_id = Column(String, index=True)
-    source = Column(String)
     
-    # CRYPTO FIELDS (Make sure these are here!)
-    symbol = Column(String, index=True)
-    name = Column(String)
-    price_usd = Column(Float)
-    market_cap = Column(BigInteger)
-    last_updated = Column(DateTime(timezone=True))
+    # NORMALIZATION FIX:
+    # We normalize based on 'symbol'. Unique constraint ensures one row per coin (e.g. 'btc').
+    symbol = Column(String, unique=True, index=True, nullable=False)
     
+    name = Column(String, nullable=False)
+    price_usd = Column(Float, nullable=False)
+    market_cap = Column(BigInteger, nullable=True)
+    
+    # Store source-specific data here (e.g. {"coingecko": {"price": 500}, "coinpaprika": {"price": 501}})
+    provider_data = Column(JSON, default=dict)
+    
+    last_updated = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
     processed_at = Column(DateTime(timezone=True), server_default=func.now())
-    
-    __table_args__ = (
-        Index('idx_source_external', 'source', 'external_id', unique=False),
-    )
+
+    # No composite index on source+external_id anymore. 
+    # Normalization is enforced by the unique symbol constraint.
