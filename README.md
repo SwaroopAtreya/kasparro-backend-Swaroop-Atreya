@@ -117,7 +117,6 @@ Visit `/api/v1/stats` to see the ETL summary.
     }
   ]
 }
-
 2. Check Data Integrity
 Visit /api/v1/data to see the normalized data. Expected Output:
 
