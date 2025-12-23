@@ -1,0 +1,6 @@
+# .dockerignore
+__pycache__
+.env
+.git
+.pytest_cache
+postgres_data/
