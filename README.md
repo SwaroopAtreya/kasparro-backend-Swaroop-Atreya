@@ -96,7 +96,7 @@ Instead of a server-side cron, the system exposes a secure endpoint that can be 
 
 ---
 
-## 🔎 Where to See the Output (Verification)
+## 🔎 Verification & Output
 
 ### 1. Check Pipeline Health
 Visit `/api/v1/stats` to see the ETL summary.
@@ -118,7 +118,7 @@ Visit `/api/v1/stats` to see the ETL summary.
   ]
 }
 
-### 2. Check Data Integrity
+2. Check Data Integrity
 Visit /api/v1/data to see the normalized data. Expected Output:
 
 JSON
@@ -134,8 +134,12 @@ JSON
     ...
   ]
 }
+📸 Execution Evidence (Local Validation)
+Successful Pipeline Execution: The screenshot below demonstrates the system successfully processing data from CoinPaprika with "SUCCESS" status in the local Docker environment.
 
-### Tech Stack
+Note: The live cloud deployment may occasionally return a 402 error for CoinPaprika due to free-tier IP restrictions on shared cloud hosting, but the core ingestion logic is validated below.
+
+🛠️ Tech Stack
 Language: Python 3.11
 
 Web Framework: FastAPI
