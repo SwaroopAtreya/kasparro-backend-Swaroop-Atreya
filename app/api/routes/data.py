@@ -1,9 +1,12 @@
-from fastapi import APIRouter, Depends, Query
+import time
+from fastapi import APIRouter, Depends, Query, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
-from app.core.db import get_db
+from app.core.db import get_db, AsyncSessionLocal
 from app.services.models import CanonicalData, ETLCheckpoint
-import time
+from app.ingestion.orchestrator import IngestionOrchestrator
+from app.ingestion.sources.coinpaprika import CoinPaprikaSource
+from app.ingestion.sources.coingecko import CoinGeckoSource
 
 router = APIRouter()
 
@@ -56,3 +59,32 @@ async def get_stats(db: AsyncSession = Depends(get_db)):
             } for cp in checkpoints
         ]
     }
+
+# --- NEW TRIGGER LOGIC BELOW ---
+
+async def _run_etl_job(source_name: str):
+    """Background task to run ETL without blocking the API"""
+    # We use AsyncSessionLocal here because BackgroundTasks run outside the request context
+    async with AsyncSessionLocal() as db:
+        if source_name == 'coinpaprika':
+            source = CoinPaprikaSource('coinpaprika_free')
+        elif source_name == 'coingecko':
+            source = CoinGeckoSource('coingecko_market')
+        else:
+            return
+        
+        orchestrator = IngestionOrchestrator(db, source)
+        await orchestrator.run()
+        print(f"✅ Manual Trigger: {source_name} finished successfully.")
+
+@router.get("/trigger-etl")
+async def trigger_etl(background_tasks: BackgroundTasks, source: str = "coinpaprika"):
+    """
+    Manually trigger an ETL run.
+    Usage: GET /api/v1/trigger-etl?source=coinpaprika
+    """
+    if source not in ["coinpaprika", "coingecko"]:
+        return {"error": "Invalid source. Use 'coinpaprika' or 'coingecko'"}
+    
+    background_tasks.add_task(_run_etl_job, source)
+    return {"message": f"🚀 ETL started for {source}. Check logs or /stats in a few seconds."}
