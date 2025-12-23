@@ -13,31 +13,25 @@ class CoinPaprikaSource(BaseSource):
     # We use the public endpoint.
     BASE_URL = "https://api.coinpaprika.com/v1"
 
-    async def fetch_data(self, last_offset: int) -> tuple[List[Dict], int]:
-        # For the anonymous free tier, we simply make a GET request without headers.
-        
-        async with httpx.AsyncClient() as client:
-            # We fetch all tickers. The free tier allows this.
-            response = await client.get(f"{self.BASE_URL}/tickers")
-            
-            if response.status_code == 429:
-                print("CoinPaprika Rate Limit! Cooling down...")
-                return [], last_offset
+    async def fetch_data(self, offset: int) -> tuple[list[dict], int]:
+        # CoinPaprika 'tickers' endpoint returns ALL data at once, so we simulate pagination.
+        if offset > 0:
+            return [], offset
 
+        url = f"{self.base_url}/tickers"
+        try:
+            response = await self.client.get(url)
             response.raise_for_status()
-            all_data = response.json()
-
-        # Incremental Simulation:
-        # We slice the big list of results into small batches (e.g., 50 at a time)
-        # based on the 'last_offset'.
-        batch_size = 50
-        batch = all_data[last_offset : last_offset + batch_size]
-        
-        # If the batch is empty (we reached the end of the list), return empty.
-        if not batch:
-            return [], last_offset
-
-        return batch, last_offset + len(batch)
+            data = response.json()
+            # Return all data as one batch (limit to first 50 for safety if needed)
+            return data[:50], offset + 50
+            
+        except httpx.HTTPStatusError as e:
+            if e.response.status_code == 402:
+                print(f"⚠️ Warning: CoinPaprika 402 Payment Required. Skipping source.")
+                # Return empty list to signal 'job done' without crashing
+                return [], offset 
+            raise e  # Re-raise other errors (500, 404, etc)
 
     def normalize(self, raw: Dict) -> CanonicalSchema:
         # Map raw API data to our clean database schema
